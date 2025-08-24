@@ -1,5 +1,21 @@
 # Configuration
-# Description: This file contains configuration settings for the macOS automate setup script.
+# Description: This file contains configuration settings for the macOS automated setup script.
+
+# Script Configuration
+SCRIPT_VERSION="2.0"
+DEBUG_MODE=false  # Set to true for verbose logging
+CONTINUE_ON_ERROR=true  # Set to false to stop on first critical error
+
+# System Detection
+ARCH=$(uname -m)
+if [[ "$ARCH" == "arm64" ]]; then
+    SYSTEM_ARCH="aarch64"
+elif [[ "$ARCH" == "x86_64" ]]; then
+    SYSTEM_ARCH="x64"
+else
+    echo "Warning: Unknown architecture $ARCH, defaulting to x64"
+    SYSTEM_ARCH="x64"
+fi
 
 # Git Configuration
 GIT_USERNAME="FainiDenis"
@@ -7,123 +23,272 @@ GIT_EMAIL="dtf8841@rit.edu"
 GIT_CONFIG_FILE="$HOME/.gitconfig"
 GIT_IGNORE_FILE="$HOME/.gitignore"
 
+# Java Configuration
 JAVA_VERSION="24"
-MAVEN_VERSION="3.9.11"
 JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-$JAVA_VERSION.jdk/Contents/Home"
+
+# Maven Configuration
+MAVEN_VERSION="3.9.11"
 MAVEN_INSTALL_DIR="/usr/local/maven"
 MAVEN_HOME="$MAVEN_INSTALL_DIR/apache-maven-$MAVEN_VERSION"
-
-ZSHRC_FILE="$HOME/.zshrc"
-SCREENSHOT_DIR="$HOME/Screenshots"
-
-
-JAVA_JDK_ARM64_URL="https://download.oracle.com/java/$JAVA_VERSION/latest/jdk-$JAVA_VERSION_macos-aarch64_bin.dmg"
-JAVA_JDK_X64_URL="https://download.oracle.com/java/$JAVA_VERSION/latest/jdk-$JAVA_VERSION_macos-x64_bin.dmg"
 MAVEN_BIN_URL="https://dlcdn.apache.org/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-$MAVEN_VERSION-bin.zip"
 
+# Shell Configuration
+ZSHRC_FILE="$HOME/.zshrc"
+BASH_PROFILE_FILE="$HOME/.bash_profile"
 
-# Homebrew Casks: Applications installed via Homebrew Cask.
-# These are GUI applications available through Homebrew.
+# Directory Configuration
+SCREENSHOT_DIR="$HOME/Screenshots"
+DOWNLOADS_DIR="$HOME/Downloads"
+DOCUMENTS_DIR="$HOME/Documents"
+
+# Java Download URLs (Architecture-specific)
+if [[ "$SYSTEM_ARCH" == "aarch64" ]]; then
+    JAVA_JDK_URL="https://download.oracle.com/java/$JAVA_VERSION/latest/jdk-${JAVA_VERSION}_macos-aarch64_bin.dmg"
+else
+    JAVA_JDK_URL="https://download.oracle.com/java/$JAVA_VERSION/latest/jdk-${JAVA_VERSION}_macos-x64_bin.dmg"
+fi
+
+# Homebrew Configuration
+HOMEBREW_UPDATE_FREQUENCY="86400"  # 24 hours in seconds (not milliseconds)
+HOMEBREW_NO_INSTALL_CLEANUP=1
+
+# Homebrew Casks: GUI Applications
+# Organized by category for better management
 CASKS=(
-    firefox
-    rectangle
-    mountain-duck
-    hazel
-    vlc
-    appcleaner
-    iterm2
-    stremio
-    visual-studio-code
-    libreoffice
-
-    # app require sudo password
-    zoom
-    displaylink
-    tailscale
-    windows-app
-    oracle-jdk
-    # wireshark
-    # tuxera-ntfs
+    # Browsers
+    "firefox"
+    
+    # Utilities
+    "rectangle"
+    "appcleaner"
+    "hazel"
+    
+    # Media
+    "vlc"
+    "stremio"
+    
+    # Development
+    "visual-studio-code"
+    "iterm2"
+    
+    # Productivity
+    "libreoffice"
+    
+    # Cloud Storage & File Management
+    "mountain-duck"
+    
+    # Communication & Remote Access
+    "zoom"
+    "tailscale"
+    "windows-app"
+    
+    # System & Hardware
+    "displaylink"
+    
+    # Development Tools
+    "oracle-jdk"
+    
+    # Optional (commented out - uncomment as needed)
+    # "wireshark"
+    # "tuxera-ntfs"
+    # "docker"
+    # "postman"
 )
 
-# Homebrew Formulae: Command line tools installed via Homebrew.
+# Homebrew Formulae: Command Line Tools
+# Organized by category
 FORMULAE=(
-    tree
-    htop
-    curl
-    mas
-    nmap
-    wget
-    git
-    python
-    python-tk
-    dockutil
+    # System Information & Monitoring
+    "tree"
+    "htop"
+    "nmap"
+    
+    # Network Tools
+    "curl"
+    "wget"
+    
+    # Version Control
+    "git"
+    
+    # Programming Languages & Runtimes
+    "python@3"
+    "python-tk"
+    
+    # Package Managers & App Store
+    "mas"
+    
+    # macOS Tools
+    "dockutil"
+    
+    # Optional development tools (commented out)
+    # "awscli"
+    # "terraform"
+    # "kubectl"
 )
 
-# VSCode Extensions: Specifies the IDs of Visual Studio Code extensions to install.
-# Each ID corresponds to an extension on the Visual Studio Code Marketplace.
+# VSCode Extensions
+# Organized by category for better management
 VSCODE=(
-  "esbenp.prettier-vscode"
-  "GitHub.copilot"
-  "dsznajder.es7-react-js-snippets"
-  "ritwickdey.liveserver"
-  "github.vscode-pull-request-github"
-  "sourcegraph.cody-ai"
-  "eamodio.gitlens"
-  "meshintelligenttechnologiesinc.pieces-vscode"
-  "foxundermoon.shell-format"
+    # Code Formatting & Linting
+    "esbenp.prettier-vscode"
+    "foxundermoon.shell-format"
+    
+    # AI Assistants
+    "GitHub.copilot"
+    "sourcegraph.cody-ai"
+    "meshintelligenttechnologiesinc.pieces-vscode"
+    
+    # Git Integration
+    "eamodio.gitlens"
+    "github.vscode-pull-request-github"
+    
+    # Web Development
+    "dsznajder.es7-react-js-snippets"
+    "ritwickdey.liveserver"
+    
+    # Optional extensions (commented out)
+    # "ms-python.python"
+    # "ms-vscode.vscode-typescript-next"
+    # "bradlc.vscode-tailwindcss"
+    # "ms-vscode-remote.remote-ssh"
 )
 
-# App Store Apps: List of App Store app IDs to install via `mas` (Mac App Store CLI).
-# Each number corresponds to an application's ID in the App Store.
+# App Store Applications
+# Use app names or IDs - the script will handle both
 APPSTORE=(
-  897118787      # Shazam
-  1530145038     # Amperfy Music
-  1564384601     # Evermusic
+    897118787      # Shazam: Music recognition
+    1530145038     # Amperfy Music: Music player
+    1564384601     # Evermusic: Cloud music player
 )
 
-# SYSTEM SETTINGS: Commands to configure macOS system preferences and behaviors.
+# macOS System Settings
+# Each setting is a complete defaults command
 SETTINGS=(
-  "defaults write -g com.apple.mouse.scaling 3"     # Sets the mouse speed to 3
-  "defaults write -g com.apple.trackpad.scaling 3"   # Sets the trackpad speed to 3
-  "defaults write com.apple.driver.AppleBluetoothMultitouch.mouse MouseButtonMode TwoButton" # Sets the Bluetooth mouse to two-button mode
-  "defaults write com.apple.AppleMultitouchMouse.plist MouseButtonMode TwoButton"   # Sets the multi-touch mouse to two-button mode
-  "defaults write -g AppleShowAllExtensions -bool true"     # Shows all file extensions in Finder
-  "defaults write com.apple.finder AppleShowAllFiles true"   # Shows hidden files in Finder
-  "defaults write com.apple.finder ShowPathbar -bool true"   # Shows the path bar in Finder
-  "defaults write com.apple.finder ShowStatusBar -bool true"  # Shows the status bar in Finder
-  "defaults write com.apple.finder NewWindowTarget PfHm"      # Makes new Finder windows open in the home directory
-  "defaults write com.apple.finder FXPreferredViewStyle Nlsv"  # Sets the preferred view style in Finder to list view
-  "defaults write com.apple.finder _FXSortFoldersFirst -bool true"  # Makes Finder sort folders before files
-  "defaults -currentHost write com.apple.ImageCapture disableHotPlug -bool true" # Stops Photos from opening automatically when devices are plugged in
-  "defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true"    # Dont create .DS_Store Files On Network Volumes
-  "defaults write com.apple.desktopservices DSDontWriteUSBStores -bool true"       # Dont create .DS_Store Files On USB Volumes
-  "defaults write com.apple.finder FXEnableExtensionChangeWarning -bool false"    # Disable the warning when changing a file extension
-  "chflags nohidden ~/Library"  # Makes the Library folder visible in Finder
+    # Mouse & Trackpad Settings
+    "defaults write -g com.apple.mouse.scaling 3"
+    "defaults write -g com.apple.trackpad.scaling 3"
+    "defaults write com.apple.driver.AppleBluetoothMultitouch.mouse MouseButtonMode TwoButton"
+    "defaults write com.apple.AppleMultitouchMouse.plist MouseButtonMode TwoButton"
+    
+    # Finder Settings
+    "defaults write -g AppleShowAllExtensions -bool true"
+    "defaults write com.apple.finder AppleShowAllFiles true"
+    "defaults write com.apple.finder ShowPathbar -bool true"
+    "defaults write com.apple.finder ShowStatusBar -bool true"
+    "defaults write com.apple.finder NewWindowTarget PfHm"
+    "defaults write com.apple.finder FXPreferredViewStyle Nlsv"
+    "defaults write com.apple.finder _FXSortFoldersFirst -bool true"
+    "defaults write com.apple.finder FXEnableExtensionChangeWarning -bool false"
+    
+    # System Behavior
+    "defaults -currentHost write com.apple.ImageCapture disableHotPlug -bool true"
+    "defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true"
+    "defaults write com.apple.desktopservices DSDontWriteUSBStores -bool true"
+    
+    # Dock Settings
+    "defaults write com.apple.dock autohide -bool true"
+    "defaults write com.apple.dock show-recents -bool false"
+    
+    # Security & Privacy
+    "defaults write com.apple.LaunchServices LSQuarantine -bool false"
+    
+    # Screenshots
+    "defaults write com.apple.screencapture location '$SCREENSHOT_DIR'"
+    "defaults write com.apple.screencapture type png"
+    
+    # Mission Control & Spaces
+    "defaults write com.apple.dock mru-spaces -bool false"
+    
+    # File system visibility
+    "chflags nohidden ~/Library"
 )
 
-# DOCK SETTINGS: Configuration for adding, removing, and replacing Dock items.
+# Dock Configuration
+# Format for DOCK_REPLACE: "new_app_path|old_app_name"
 DOCK_REPLACE=(
-  # Format: "replacement_app_path|app_name_to_replace"
-  "/Applications/Firefox.app|Safari"
+    "/Applications/Firefox.app|Safari"
+    "/Applications/Visual Studio Code.app|Launchpad"
 )
 
+# Applications to add to dock
 DOCK_ADD=(
-  "/Applications/iTerm.app"
-  "/Applications/Visual Studio Code.app"
-  "/Applications/Microsoft Teams (work or school).app"
-)
-DOCK_REMOVE=(
-  "Meldinger"
-  "Kart"
-  "Bilder"
-  "Påminnelser"
-  "FaceTime"
-  "Kontakter"
-  "TV"
-  "Musikk"
-  "Mail"
+    "/Applications/iTerm.app"
+    "/Applications/Visual Studio Code.app"
+    "/Applications/Firefox.app"
+    "/Applications/Amperfy Music.app"
 )
 
-# HOMEBREW AUTOUPDATE: Configures the frequency of Homebrew package updates in milliseconds.
-HOMEBREW_UPDATE_FREQUENCY=86400 # 24 hours in milliseconds
+# Applications to remove from dock by name
+DOCK_REMOVE=(
+    "Messages"
+    "Maps" 
+    "Photos"
+    "Calendar"
+    "Contacts"
+    "Notes"
+    "Reminders"
+    "Freeform"
+    "Music"
+    "News"
+    "App Store"
+)
+
+# Directory Creation List
+# Directories to create during setup
+DIRECTORIES_TO_CREATE=(
+    "$SCREENSHOT_DIR"
+    "$HOME/Documents/Projects"
+    "$HOME/.ssh"
+)
+
+# SSH Configuration (if needed)
+SSH_KEY_TYPE="ed25519"
+SSH_KEY_COMMENT="$GIT_EMAIL"
+
+# Validation Function
+validate_config() {
+    local errors=()
+    
+    # Check required variables
+    [[ -z "$GIT_USERNAME" ]] && errors+=("GIT_USERNAME not set")
+    [[ -z "$GIT_EMAIL" ]] && errors+=("GIT_EMAIL not set")
+    [[ -z "$JAVA_VERSION" ]] && errors+=("JAVA_VERSION not set")
+    [[ -z "$MAVEN_VERSION" ]] && errors+=("MAVEN_VERSION not set")
+    
+    # Check email format
+    if [[ -n "$GIT_EMAIL" ]] && [[ ! "$GIT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+        errors+=("GIT_EMAIL format is invalid")
+    fi
+    
+    # Check URL accessibility (basic format check)
+    if [[ -n "$MAVEN_BIN_URL" ]] && [[ ! "$MAVEN_BIN_URL" =~ ^https?:// ]]; then
+        errors+=("MAVEN_BIN_URL is not a valid URL")
+    fi
+    
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        echo "Configuration validation errors:"
+        printf '%s\n' "${errors[@]}"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Export all configuration for use in other scripts
+export SCRIPT_VERSION DEBUG_MODE CONTINUE_ON_ERROR SYSTEM_ARCH
+export GIT_USERNAME GIT_EMAIL GIT_CONFIG_FILE GIT_IGNORE_FILE
+export JAVA_VERSION JAVA_HOME JAVA_JDK_URL
+export MAVEN_VERSION MAVEN_INSTALL_DIR MAVEN_HOME MAVEN_BIN_URL
+export ZSHRC_FILE BASH_PROFILE_FILE
+export SCREENSHOT_DIR DOWNLOADS_DIR DOCUMENTS_DIR
+export HOMEBREW_UPDATE_FREQUENCY HOMEBREW_NO_INSTALL_CLEANUP
+export SSH_KEY_TYPE SSH_KEY_COMMENT
+
+# Run validation when config is sourced
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+    validate_config || {
+        echo "Configuration validation failed. Please fix the errors above."
+        return 1
+    }
+fi

@@ -4,26 +4,46 @@
 # Git Configuration
 GIT_USERNAME="FainiDenis"
 GIT_EMAIL="dtf8841@rit.edu"
+GIT_CONFIG_FILE="$HOME/.gitconfig"
+GIT_IGNORE_FILE="$HOME/.gitignore"
+
+JAVA_VERSION="24"
+MAVEN_VERSION="3.9.11"
+JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-$JAVA_VERSION.jdk/Contents/Home"
+MAVEN_INSTALL_DIR="/usr/local/maven"
+MAVEN_HOME="$MAVEN_INSTALL_DIR/apache-maven-$MAVEN_VERSION"
+
+ZSHRC_FILE="$HOME/.zshrc"
+SCREENSHOT_DIR="$HOME/Screenshots"
+
+
+JAVA_JDK_ARM64_URL="https://download.oracle.com/java/$JAVA_VERSION/latest/jdk-$JAVA_VERSION_macos-aarch64_bin.dmg"
+JAVA_JDK_X64_URL="https://download.oracle.com/java/$JAVA_VERSION/latest/jdk-$JAVA_VERSION_macos-x64_bin.dmg"
+MAVEN_BIN_URL="https://dlcdn.apache.org/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-$MAVEN_VERSION-bin.zip"
+
 
 # Homebrew Casks: Applications installed via Homebrew Cask.
 # These are GUI applications available through Homebrew.
 CASKS=(
     firefox
-    zoom
     rectangle
-    displaylink
-    tailscale
     mountain-duck
     hazel
     vlc
     appcleaner
     iterm2
     stremio
-    wireshark
     visual-studio-code
-    windows-app
     libreoffice
+
+    # app require sudo password
+    zoom
+    displaylink
+    tailscale
+    windows-app
     oracle-jdk
+    # wireshark
+    # tuxera-ntfs
 )
 
 # Homebrew Formulae: Command line tools installed via Homebrew.

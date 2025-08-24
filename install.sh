@@ -79,6 +79,58 @@ install_vscode_extensions() {
   done
 }
 
+set_java_home() {
+  echo
+  echo "${GREEN}Setting JAVA_HOME...${NC}"
+  echo "export JAVA_HOME=$JAVA_HOME" >> "$ZSHRC_FILE"
+  echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> "$ZSHRC_FILE"
+}
+
+check_and_install_maven() {
+
+  if ! command -v mvn &>/dev/null; then
+    echo "${GREEN}Downloading and installing Maven...${NC}"
+    if curl -L "$MAVEN_BIN_URL" -o /tmp/maven.zip; then
+        sudo mkdir -p "$MAVEN_INSTALL_DIR" || { echo "${RED}Failed${NC}" "Could not create Maven install directory"; exit 1; }
+
+        if sudo unzip -q /tmp/maven.zip -d /tmp; then
+            # Remove existing directory if it exists
+            sudo rm -rf "$MAVEN_HOME"
+            
+            # Move the unzipped directory to the correct location
+            sudo mv "/tmp/apache-maven-$MAVEN_VERSION" "$MAVEN_HOME" || { echo "${RED}Failed${NC}" "Could not move Maven directory"; exit 1; }
+
+            # Add Maven to PATH in .zshrc if not already present
+            if ! grep -q "export MAVEN_HOME=$MAVEN_HOME" "$ZSHRC_FILE"; then
+                echo "export MAVEN_HOME=$MAVEN_HOME" >> "$ZSHRC_FILE"
+                echo 'export PATH="$MAVEN_HOME/bin:$PATH"' >> "$ZSHRC_FILE"
+            fi
+            
+            # Clean up
+            rm -f /tmp/maven.zip
+            
+            # Verify installation
+            if "$MAVEN_HOME/bin/mvn" --version &>/dev/null; then
+                echo "${GREEN}Maven $MAVEN_VERSION installed successfully${NC}"
+            else
+                echo "${RED}Maven installation verification failed${NC}"
+                exit 1
+            fi
+        else
+            echo "${RED}Failed to unzip Maven${NC}"
+            exit 1
+        fi
+    else
+        echo "${RED}Failed to download Maven${NC}"
+        exit 1
+    fi
+else
+    installed_version=$(mvn --version 2>/dev/null | head -n 1 | awk '{print $3}')
+    echo "${GREEN}Maven already installed (version $installed_version)${NC}"
+fi
+
+}
+
 cleanup() {
   echo
   echo "${GREEN}Cleaning up...${NC}"
@@ -143,6 +195,8 @@ main() {
   fi
 
   cleanup
+  set_java_home
+  check_and_install_maven
   configure_macOS_settings
   configure_dock
   configure_git

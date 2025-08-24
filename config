@@ -57,6 +57,7 @@ FORMULAE=(
     git
     python
     python-tk
+    dockutil
 )
 
 # VSCode Extensions: Specifies the IDs of Visual Studio Code extensions to install.

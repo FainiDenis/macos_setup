@@ -1,13 +1,13 @@
 #!/bin/zsh
 
 # Description: macOS setup script that loads configuration from separate config file
-# Usage: bash -c "$(curl -fsSL https://raw.githubusercontent.com/FainiDenis/mac_setup/main/install.sh)"
+# Usage: bash -c "$(curl -fsSL https://raw.githubusercontent.com/FainiDenis/macos_setup/main/install.sh)"
 
 set -euo pipefail
 
 # GitHub Configuration
 GITHUB_USER="FainiDenis"
-GITHUB_REPO="mac_setup"
+GITHUB_REPO="macos_setup"
 GITHUB_BRANCH="main"
 CONFIG_URL="https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/$GITHUB_BRANCH/config"
 

@@ -166,7 +166,7 @@ install_casks() {
     
     for cask in "${CASKS[@]}"; do
         log_info "Installing cask: $cask"
-        if ! brew install --cask "$cask"; then
+        if ! sudo brew install --cask "$cask"; then
             log_error "Failed to install cask: $cask"
             failed_casks+=("$cask")
         fi
@@ -372,10 +372,11 @@ cleanup() {
         mkdir -p ~/Library/LaunchAgents
         
         if brew tap homebrew/autoupdate 2>/dev/null; then
-            if ! brew autoupdate start "$HOMEBREW_UPDATE_FREQUENCY" --upgrade --cleanup --immediate --sudo; then
+            # Convert frequency to the correct format for brew autoupdate
+            if ! brew autoupdate start "${HOMEBREW_UPDATE_FREQUENCY}" --upgrade --cleanup --immediate; then
                 log_warn "Failed to set up Homebrew auto-update"
             else
-                log_info "Homebrew auto-update configured"
+                log_info "Homebrew auto-update configured for every ${HOMEBREW_UPDATE_FREQUENCY} seconds"
             fi
         else
             log_warn "Failed to tap homebrew/autoupdate"
@@ -465,13 +466,46 @@ install_ohmyzsh() {
 }
 
 configure_macos_settings() {
-    # This function was referenced in main() but not defined in the original script
-    # Adding a placeholder - implement your macOS settings here
-    if command -v configure_macOS_settings &>/dev/null; then
-        log_info "Configuring macOS settings..."
-        configure_macOS_settings
+    if [[ -z "${SETTINGS:-}" ]] || [[ ${#SETTINGS[@]} -eq 0 ]]; then
+        log_warn "No macOS settings specified in configuration"
+        return 0
+    fi
+    
+    log_info "Configuring macOS settings..."
+    local failed_settings=()
+    
+    # Create screenshot directory if specified
+    if [[ -n "${SCREENSHOT_DIR:-}" ]]; then
+        mkdir -p "$SCREENSHOT_DIR" 2>/dev/null || log_warn "Failed to create screenshot directory"
+    fi
+    
+    # Create additional directories
+    if [[ -n "${DIRECTORIES_TO_CREATE:-}" ]] && [[ ${#DIRECTORIES_TO_CREATE[@]} -gt 0 ]]; then
+        for dir in "${DIRECTORIES_TO_CREATE[@]}"; do
+            if ! mkdir -p "$dir" 2>/dev/null; then
+                log_warn "Failed to create directory: $dir"
+            fi
+        done
+    fi
+    
+    # Apply system settings
+    for setting in "${SETTINGS[@]}"; do
+        log_info "Applying setting: ${setting:0:50}..."
+        if ! eval "$setting" 2>/dev/null; then
+            log_warn "Failed to apply setting: $setting"
+            failed_settings+=("$setting")
+        fi
+    done
+    
+    # Restart affected services
+    log_info "Restarting Finder and Dock to apply changes..."
+    killall Finder 2>/dev/null || true
+    killall Dock 2>/dev/null || true
+    
+    if [[ ${#failed_settings[@]} -gt 0 ]]; then
+        log_warn "Failed to apply ${#failed_settings[@]} settings"
     else
-        log_warn "configure_macOS_settings function not found, skipping"
+        log_info "All macOS settings applied successfully"
     fi
 }
 

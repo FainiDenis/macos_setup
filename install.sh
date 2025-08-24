@@ -93,7 +93,7 @@ confirm_execution() {
     echo "  • Set up development environment"
     echo
     
-    read -r "REPLY?Continue? (y/N): "
+    read -r -p "Continue? (y/N): " REPLY
     [[ $REPLY =~ ^[Yy]$ ]] || { log_info "Setup cancelled"; exit 0; }
 }
 

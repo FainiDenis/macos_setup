@@ -1,565 +1,311 @@
 #!/bin/zsh
 
-# Description: This script automates the setup of a macOS environment with improved error handling.
+# Description: macOS setup script that loads configuration from separate config file
+# Usage: bash -c "$(curl -fsSL https://raw.githubusercontent.com/FainiDenis/mac_setup/main/install.sh)"
 
-set -euo pipefail  # Exit on error, undefined variables, and pipe failures
+set -euo pipefail
 
-# Load configuration with error checking
-if [[ -f "./config" ]]; then
-    source ./config
-else
-    echo "Error: Configuration file './config' not found!"
-    exit 1
-fi
+# GitHub Configuration
+GITHUB_USER="FainiDenis"
+GITHUB_REPO="mac_setup"
+GITHUB_BRANCH="main"
+CONFIG_URL="https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/$GITHUB_BRANCH/config"
 
-# COLOR
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-# Logging functions
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
+# Logging
+log() { echo -e "${2:-$NC}[${1}]${NC} ${3}"; }
+log_info() { log "INFO" "$GREEN" "$1"; }
+log_warn() { log "WARN" "$YELLOW" "$1"; }
+log_error() { log "ERROR" "$RED" "$1" >&2; }
+log_step() { log "STEP" "$BLUE" "$1"; }
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1" >&2
-}
-
-# Error handling function
+# Error handling
 handle_error() {
-    local exit_code=$?
-    local line_number=$1
-    log_error "Script failed at line $line_number with exit code $exit_code"
-    exit $exit_code
+    log_error "Script failed at line $1 with exit code $2"
+    [[ -n "$TEMP_DIR" ]] && rm -rf "$TEMP_DIR" 2>/dev/null
+    exit $2
 }
 
-# Set up error trap
-trap 'handle_error $LINENO' ERR
+# Temporary config file
+TEMP_DIR=$(mktemp -d -t macos-setup-XXXXXX)
+CONFIG_FILE="$TEMP_DIR/config"
 
-# Functions
-keep_sudo_alive() {
-    log_info "Requesting sudo privileges..."
+cleanup() { rm -rf "$TEMP_DIR" 2>/dev/null && log_info "Cleaned temporary files"; }
+trap 'cleanup' EXIT
+trap 'handle_error $LINENO $?' ERR
+
+# Download configuration
+download_config() {
+    log_step "Downloading configuration"
     
-    if ! sudo -v; then
-        log_error "Failed to obtain sudo privileges"
+    if ! curl -fsSL "$CONFIG_URL" -o "$CONFIG_FILE"; then
+        log_error "Failed to download config from: $CONFIG_URL"
+        log_error "Please check:"
+        log_error "  1. Repository exists and is public"
+        log_error "  2. File 'config' exists in the repository"
         return 1
     fi
     
-    # Keep sudo alive in background
+    log_info "Configuration downloaded"
+}
+
+# Load configuration
+load_config() {
+    [[ -f "$CONFIG_FILE" ]] || { log_error "Config file not found"; return 1; }
+    
+    # Source the configuration file
+    if ! source "$CONFIG_FILE"; then
+        log_error "Failed to load configuration"
+        return 1
+    fi
+    
+    # Run validation if available
+    if command -v validate_config &>/dev/null; then
+        validate_config || { log_error "Configuration validation failed"; return 1; }
+    fi
+    
+    log_info "Configuration loaded successfully"
+}
+
+# Display banner
+show_banner() {
+    echo
+    echo -e "${BLUE}================================${NC}"
+    echo -e "${BLUE}    macOS Automated Setup       ${NC}"
+    echo -e "${BLUE}================================${NC}"
+    echo
+    echo -e "${GREEN}Repository:${NC} https://github.com/$GITHUB_USER/$GITHUB_REPO"
+    echo -e "${GREEN}System:${NC} $(sw_vers -productName) $(sw_vers -productVersion) ($(uname -m))"
+    echo
+}
+
+# Confirmation
+confirm_execution() {
+    echo -e "${YELLOW}This script will:${NC}"
+    echo "  • Install Homebrew and packages"
+    echo "  • Configure macOS settings"
+    echo "  • Set up development environment"
+    echo
+    
+    read -r "REPLY?Continue? (y/N): "
+    [[ $REPLY =~ ^[Yy]$ ]] || { log_info "Setup cancelled"; exit 0; }
+}
+
+# Keep sudo alive
+keep_sudo_alive() {
+    sudo -v || { log_error "Failed to obtain sudo"; return 1; }
+    
     while true; do
         sudo -n true
         sleep 60
         kill -0 "$$" || exit
     done 2>/dev/null &
     
-    log_info "Sudo privileges obtained and kept alive"
+    log_info "Sudo privileges obtained"
 }
 
-update_macos() {
-    log_info "Checking for macOS updates..."
-    
-    if ! command -v softwareupdate &>/dev/null; then
-        log_error "softwareupdate command not found"
-        return 1
-    fi
-    
-    if sudo softwareupdate -l 2>/dev/null | grep -q "No new software available"; then
-        log_info "No macOS updates available"
-    else
-        log_info "Installing macOS updates..."
-        if ! sudo softwareupdate -i -a; then
-            log_error "Failed to install macOS updates"
-            return 1
-        fi
-    fi
-}
-
+# Install Homebrew
 install_homebrew() {
-    log_info "Installing Homebrew..."
+    command -v brew &>/dev/null && { log_info "Homebrew already installed"; return 0; }
     
-    # Check if Homebrew is already installed
-    if command -v brew &>/dev/null; then
-        log_info "Homebrew already installed"
-        return 0
-    fi
+    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
+        log_error "Failed to install Homebrew"; return 1;
+    }
     
-    # Install Homebrew
-    if ! NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
-        log_error "Failed to install Homebrew"
-        return 1
-    fi
+    # Add to PATH
+    local brew_path="/opt/homebrew/bin/brew"
+    [[ -f "$brew_path" ]] || brew_path="/usr/local/bin/brew"
+    [[ -f "$brew_path" ]] || { log_error "Homebrew not found"; return 1; }
     
-    # Add Homebrew to PATH
-    if [[ -f "/opt/homebrew/bin/brew" ]]; then
-        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "${HOME}/.zprofile"
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-    elif [[ -f "/usr/local/bin/brew" ]]; then
-        echo 'eval "$(/usr/local/bin/brew shellenv)"' >> "${HOME}/.zprofile"
-        eval "$(/usr/local/bin/brew shellenv)"
-    else
-        log_error "Homebrew installation location not found"
-        return 1
-    fi
-    
-    # Verify installation
-    log_info "Verifying Homebrew installation..."
-    if ! brew update && brew doctor; then
-        log_warn "Homebrew doctor reported issues, but continuing..."
-    fi
+    echo "eval \"\$($brew_path shellenv)\"" >> "${HOME}/.zprofile"
+    eval "\$($brew_path shellenv)"
     
     export HOMEBREW_NO_INSTALL_CLEANUP=1
-    log_info "Homebrew installed successfully"
+    log_info "Homebrew installed"
 }
 
-install_brewfile() {
-    if [[ ! -f "./Brewfile" ]]; then
-        log_error "Brewfile not found in current directory"
-        return 1
-    fi
+# Install packages
+install_packages() {
+    local failed=()
     
-    log_info "Installing packages from Brewfile..."
-    
-    if ! brew bundle --file="./Brewfile"; then
-        log_error "Failed to install from Brewfile"
-        return 1
-    fi
-    
-    log_info "Brewfile installation completed"
-}
-
-install_formulae() {
-    if [[ -z "${FORMULAE:-}" ]] || [[ ${#FORMULAE[@]} -eq 0 ]]; then
-        log_warn "No formulae specified in configuration"
-        return 0
-    fi
-    
-    log_info "Installing formulae..."
-    local failed_formulae=()
-    
-    for formula in "${FORMULAE[@]}"; do
-        log_info "Installing formula: $formula"
-        if ! brew install "$formula"; then
-            log_error "Failed to install formula: $formula"
-            failed_formulae+=("$formula")
-        fi
+    # Install formulae
+    [[ -n "${FORMULAE:-}" ]] && for formula in "${FORMULAE[@]}"; do
+        brew install "$formula" || { log_warn "Failed: $formula"; failed+=("$formula"); }
     done
     
-    if [[ ${#failed_formulae[@]} -gt 0 ]]; then
-        log_warn "Failed to install formulae: ${failed_formulae[*]}"
-    fi
-}
-
-install_casks() {
-    if [[ -z "${CASKS:-}" ]] || [[ ${#CASKS[@]} -eq 0 ]]; then
-        log_warn "No casks specified in configuration"
-        return 0
-    fi
-    
-    log_info "Installing casks..."
-    local failed_casks=()
-    
-    for cask in "${CASKS[@]}"; do
-        log_info "Installing cask: $cask"
-        if ! sudo brew install --cask "$cask"; then
-            log_error "Failed to install cask: $cask"
-            failed_casks+=("$cask")
-        fi
+    # Install regular casks
+    [[ -n "${CASKS:-}" ]] && for cask in "${CASKS[@]}"; do
+        # Skip sudo casks (handled separately)
+        [[ -n "${SUDO_CASKS:-}" && " ${SUDO_CASKS[*]} " =~ " $cask " ]] && continue
+        brew install --cask "$cask" || { log_warn "Failed: $cask"; failed+=("$cask"); }
     done
     
-    if [[ ${#failed_casks[@]} -gt 0 ]]; then
-        log_warn "Failed to install casks: ${failed_casks[*]}"
-    fi
-}
-
-install_app_store_apps() {
-    if [[ -z "${APPSTORE:-}" ]] || [[ ${#APPSTORE[@]} -eq 0 ]]; then
-        log_warn "No App Store apps specified in configuration"
-        return 0
-    fi
-    
-    # Check if mas is installed
-    if ! command -v mas &>/dev/null; then
-        log_error "mas (Mac App Store CLI) is not installed. Install it first with: brew install mas"
-        return 1
-    fi
-    
-    # Check if signed into App Store
-    if ! mas account &>/dev/null; then
-        log_error "Not signed into Mac App Store. Please sign in first."
-        return 1
-    fi
-    
-    log_info "Installing App Store apps..."
-    local failed_apps=()
-    
-    for app in "${APPSTORE[@]}"; do
-        log_info "Installing App Store app: $app"
-        if ! mas install "$app"; then
-            log_error "Failed to install App Store app: $app"
-            failed_apps+=("$app")
-        fi
+    # Install sudo casks with elevated privileges
+    [[ -n "${SUDO_CASKS:-}" ]] && for cask in "${SUDO_CASKS[@]}"; do
+        log_info "Installing sudo cask: $cask"
+        sudo brew install --cask "$cask" || { log_warn "Failed sudo cask: $cask"; failed+=("$cask"); }
     done
     
-    if [[ ${#failed_apps[@]} -gt 0 ]]; then
-        log_warn "Failed to install App Store apps: ${failed_apps[*]}"
-    fi
-}
-
-install_vscode_extensions() {
-    if [[ -z "${VSCODE:-}" ]] || [[ ${#VSCODE[@]} -eq 0 ]]; then
-        log_warn "No VSCode extensions specified in configuration"
-        return 0
-    fi
-    
-    # Check if code command is available
-    if ! command -v code &>/dev/null; then
-        log_error "VSCode 'code' command not found. Make sure VSCode is installed and added to PATH."
-        return 1
-    fi
-    
-    log_info "Installing VSCode extensions..."
-    local failed_extensions=()
-    
-    for extension in "${VSCODE[@]}"; do
-        log_info "Installing VSCode extension: $extension"
-        if ! code --install-extension "$extension"; then
-            log_error "Failed to install VSCode extension: $extension"
-            failed_extensions+=("$extension")
-        fi
-    done
-    
-    if [[ ${#failed_extensions[@]} -gt 0 ]]; then
-        log_warn "Failed to install VSCode extensions: ${failed_extensions[*]}"
-    fi
-}
-
-set_java_home() {
-    if [[ -z "${JAVA_HOME:-}" ]]; then
-        log_warn "JAVA_HOME not set in configuration, skipping Java configuration"
-        return 0
-    fi
-    
-    if [[ -z "${ZSHRC_FILE:-}" ]]; then
-        ZSHRC_FILE="${HOME}/.zshrc"
-    fi
-    
-    log_info "Configuring Java environment..."
-    
-    # Check if Java is actually installed at the specified path
-    if [[ ! -d "$JAVA_HOME" ]]; then
-        log_error "Java installation not found at $JAVA_HOME"
-        return 1
-    fi
-    
-    # Check if already configured
-    if ! grep -q "export JAVA_HOME=$JAVA_HOME" "$ZSHRC_FILE" 2>/dev/null; then
-        echo "export JAVA_HOME=$JAVA_HOME" >> "$ZSHRC_FILE"
-        echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> "$ZSHRC_FILE"
-        log_info "Java environment configured in $ZSHRC_FILE"
-    else
-        log_info "Java environment already configured"
-    fi
-}
-
-check_and_install_maven() {
-    # Check if Maven variables are set
-    if [[ -z "${MAVEN_VERSION:-}" ]] || [[ -z "${MAVEN_BIN_URL:-}" ]] || [[ -z "${MAVEN_HOME:-}" ]] || [[ -z "${MAVEN_INSTALL_DIR:-}" ]]; then
-        log_warn "Maven configuration variables not set, skipping Maven installation"
-        return 0
-    fi
-    
-    if [[ -z "${ZSHRC_FILE:-}" ]]; then
-        ZSHRC_FILE="${HOME}/.zshrc"
-    fi
-    
-    if command -v mvn &>/dev/null; then
-        local installed_version
-        installed_version=$(mvn --version 2>/dev/null | head -n 1 | awk '{print $3}')
-        log_info "Maven already installed (version $installed_version)"
-        return 0
-    fi
-    
-    log_info "Installing Maven $MAVEN_VERSION..."
-    
-    # Create temporary directory
-    local temp_dir
-    temp_dir=$(mktemp -d)
-    local maven_zip="$temp_dir/maven.zip"
-    
-    # Download Maven
-    if ! curl -L "$MAVEN_BIN_URL" -o "$maven_zip"; then
-        log_error "Failed to download Maven from $MAVEN_BIN_URL"
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    # Create install directory
-    if ! sudo mkdir -p "$MAVEN_INSTALL_DIR"; then
-        log_error "Could not create Maven install directory: $MAVEN_INSTALL_DIR"
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    # Extract Maven
-    if ! sudo unzip -q "$maven_zip" -d "$temp_dir"; then
-        log_error "Failed to extract Maven"
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    # Remove existing installation
-    if [[ -d "$MAVEN_HOME" ]]; then
-        sudo rm -rf "$MAVEN_HOME"
-    fi
-    
-    # Move Maven to final location
-    if ! sudo mv "$temp_dir/apache-maven-$MAVEN_VERSION" "$MAVEN_HOME"; then
-        log_error "Could not move Maven to $MAVEN_HOME"
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    # Configure environment
-    if ! grep -q "export MAVEN_HOME=$MAVEN_HOME" "$ZSHRC_FILE" 2>/dev/null; then
-        echo "export MAVEN_HOME=$MAVEN_HOME" >> "$ZSHRC_FILE"
-        echo 'export PATH="$MAVEN_HOME/bin:$PATH"' >> "$ZSHRC_FILE"
-    fi
-    
-    # Clean up
-    rm -rf "$temp_dir"
-    
-    # Verify installation
-    if "$MAVEN_HOME/bin/mvn" --version &>/dev/null; then
-        log_info "Maven $MAVEN_VERSION installed successfully"
-    else
-        log_error "Maven installation verification failed"
-        return 1
-    fi
-}
-
-cleanup() {
-    log_info "Cleaning up Homebrew..."
-    
-    if ! command -v brew &>/dev/null; then
-        log_warn "Homebrew not found, skipping cleanup"
-        return 0
-    fi
-    
-    if ! brew update; then
-        log_warn "Failed to update Homebrew"
-    fi
-    
-    if ! brew upgrade; then
-        log_warn "Failed to upgrade Homebrew packages"
-    fi
-    
-    if ! brew cleanup; then
-        log_warn "Failed to cleanup Homebrew"
-    fi
-    
-    if ! brew doctor; then
-        log_warn "Homebrew doctor reported issues"
-    fi
-    
-    # Set up auto-update if configured
-    if [[ -n "${HOMEBREW_UPDATE_FREQUENCY:-}" ]]; then
-        mkdir -p ~/Library/LaunchAgents
-        
-        if brew tap homebrew/autoupdate 2>/dev/null; then
-            # Convert frequency to the correct format for brew autoupdate
-            if ! brew autoupdate start "${HOMEBREW_UPDATE_FREQUENCY}" --upgrade --cleanup --immediate; then
-                log_warn "Failed to set up Homebrew auto-update"
-            else
-                log_info "Homebrew auto-update configured for every ${HOMEBREW_UPDATE_FREQUENCY} seconds"
-            fi
-        else
-            log_warn "Failed to tap homebrew/autoupdate"
-        fi
-    fi
-}
-
-configure_dock() {
-    # Check if dockutil is available
-    if ! command -v dockutil &>/dev/null; then
-        log_warn "dockutil not found, skipping dock configuration"
-        return 0
-    fi
-    
-    log_info "Configuring dock..."
-    
-    # Replace dock items
-    if [[ -n "${DOCK_REPLACE:-}" ]] && [[ ${#DOCK_REPLACE[@]} -gt 0 ]]; then
-        for item in "${DOCK_REPLACE[@]}"; do
-            if [[ "$item" == *"|"* ]]; then
-                IFS="|" read -r add_app replace_app <<<"$item"
-                if [[ -n "$add_app" ]] && [[ -n "$replace_app" ]]; then
-                    if ! dockutil --add "$add_app" --replacing "$replace_app" &>/dev/null; then
-                        log_warn "Failed to replace dock item: $replace_app with $add_app"
-                    fi
-                fi
-            fi
+    # Install App Store apps
+    if [[ -n "${APPSTORE:-}" ]] && command -v mas &>/dev/null; then
+        for app in "${APPSTORE[@]}"; do
+            mas install "$app" || { log_warn "Failed App Store app: $app"; failed+=("$app"); }
         done
     fi
     
-    # Add dock items
-    if [[ -n "${DOCK_ADD:-}" ]] && [[ ${#DOCK_ADD[@]} -gt 0 ]]; then
-        for app in "${DOCK_ADD[@]}"; do
-            if ! dockutil --add "$app" &>/dev/null; then
-                log_warn "Failed to add dock item: $app"
-            fi
+    # Install VSCode extensions
+    if [[ -n "${VSCODE:-}" ]] && command -v code &>/dev/null; then
+        for extension in "${VSCODE[@]}"; do
+            code --install-extension "$extension" || { log_warn "Failed VSCode extension: $extension"; failed+=("$extension"); }
         done
     fi
     
-    # Remove dock items
-    if [[ -n "${DOCK_REMOVE:-}" ]] && [[ ${#DOCK_REMOVE[@]} -gt 0 ]]; then
-        for app in "${DOCK_REMOVE[@]}"; do
-            if ! dockutil --remove "$app" &>/dev/null; then
-                log_warn "Failed to remove dock item: $app"
-            fi
-        done
-    fi
-    
-    log_info "Dock configuration completed"
+    [[ ${#failed[@]} -eq 0 ]] || log_warn "Failed packages: ${failed[*]}"
 }
 
+# Configure Git
 configure_git() {
-    if [[ -z "${GIT_USERNAME:-}" ]] || [[ -z "${GIT_EMAIL:-}" ]]; then
-        log_warn "Git username or email not configured, skipping Git setup"
-        return 0
-    fi
+    [[ -z "${GIT_USERNAME:-}" || -z "${GIT_EMAIL:-}" ]] && { log_warn "Git not configured"; return 0; }
     
-    log_info "Configuring Git..."
-    
-    if ! command -v git &>/dev/null; then
-        log_error "Git not found"
-        return 1
-    fi
+    command -v git &>/dev/null || { log_warn "Git not found"; return 1; }
     
     git config --global user.name "$GIT_USERNAME"
     git config --global user.email "$GIT_EMAIL"
     git config --global color.ui true
     
-    log_info "Git configuration completed"
+    log_info "Git configured"
 }
 
-install_ohmyzsh() {
-    # Check if Oh My Zsh is already installed
-    if [[ -d "${HOME}/.oh-my-zsh" ]]; then
-        log_info "Oh My Zsh already installed"
-        return 0
+# Configure Java
+configure_java() {
+    [[ -z "${JAVA_HOME:-}" ]] && { log_warn "Java not configured"; return 0; }
+    [[ -d "$JAVA_HOME" ]] || { log_warn "Java not found at $JAVA_HOME"; return 1; }
+    
+    local zshrc="${HOME}/.zshrc"
+    if ! grep -q "export JAVA_HOME=$JAVA_HOME" "$zshrc" 2>/dev/null; then
+        echo "export JAVA_HOME=$JAVA_HOME" >> "$zshrc"
+        echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> "$zshrc"
+        log_info "Java environment configured"
     fi
-    
-    log_info "Installing Oh My Zsh..."
-    
-    if ! sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended; then
-        log_error "Failed to install Oh My Zsh"
-        return 1
-    fi
-    
-    log_info "Oh My Zsh installed successfully"
 }
 
-configure_macos_settings() {
-    if [[ -z "${SETTINGS:-}" ]] || [[ ${#SETTINGS[@]} -eq 0 ]]; then
-        log_warn "No macOS settings specified in configuration"
-        return 0
+# Install Maven
+install_maven() {
+    [[ -z "${MAVEN_VERSION:-}" || -z "${MAVEN_BIN_URL:-}" || -z "${MAVEN_HOME:-}" ]] && {
+        log_warn "Maven not configured"; return 0;
+    }
+    
+    command -v mvn &>/dev/null && { log_info "Maven already installed"; return 0; }
+    
+    log_step "Installing Maven $MAVEN_VERSION"
+    
+    local temp_dir=$(mktemp -d)
+    local maven_zip="$temp_dir/maven.zip"
+    
+    curl -L "$MAVEN_BIN_URL" -o "$maven_zip" || { log_error "Failed to download Maven"; return 1; }
+    
+    sudo mkdir -p "$(dirname "$MAVEN_HOME")" || { log_error "Could not create Maven directory"; return 1; }
+    sudo unzip -q "$maven_zip" -d "$(dirname "$MAVEN_HOME")" || { log_error "Failed to extract Maven"; return 1; }
+    
+    local zshrc="${HOME}/.zshrc"
+    if ! grep -q "export MAVEN_HOME=$MAVEN_HOME" "$zshrc" 2>/dev/null; then
+        echo "export MAVEN_HOME=$MAVEN_HOME" >> "$zshrc"
+        echo 'export PATH="$MAVEN_HOME/bin:$PATH"' >> "$zshrc"
     fi
     
-    log_info "Configuring macOS settings..."
-    local failed_settings=()
+    rm -rf "$temp_dir"
+    log_info "Maven installed"
+}
+
+# Configure system settings
+configure_system() {
+    [[ -z "${SETTINGS:-}" ]] && { log_warn "No system settings configured"; return 0; }
     
-    # Create screenshot directory if specified
-    if [[ -n "${SCREENSHOT_DIR:-}" ]]; then
-        mkdir -p "$SCREENSHOT_DIR" 2>/dev/null || log_warn "Failed to create screenshot directory"
-    fi
-    
-    # Create additional directories
-    if [[ -n "${DIRECTORIES_TO_CREATE:-}" ]] && [[ ${#DIRECTORIES_TO_CREATE[@]} -gt 0 ]]; then
-        for dir in "${DIRECTORIES_TO_CREATE[@]}"; do
-            if ! mkdir -p "$dir" 2>/dev/null; then
-                log_warn "Failed to create directory: $dir"
-            fi
-        done
-    fi
-    
-    # Apply system settings
-    for setting in "${SETTINGS[@]}"; do
-        log_info "Applying setting: ${setting:0:50}..."
-        if ! eval "$setting" 2>/dev/null; then
-            log_warn "Failed to apply setting: $setting"
-            failed_settings+=("$setting")
-        fi
+    # Create directories
+    [[ -n "${SCREENSHOT_DIR:-}" ]] && mkdir -p "$SCREENSHOT_DIR"
+    [[ -n "${DIRECTORIES_TO_CREATE:-}" ]] && for dir in "${DIRECTORIES_TO_CREATE[@]}"; do
+        mkdir -p "$dir" 2>/dev/null || log_warn "Failed to create: $dir"
     done
     
-    # Restart affected services
-    log_info "Restarting Finder and Dock to apply changes..."
+    # Apply settings
+    for setting in "${SETTINGS[@]}"; do
+        eval "$setting" 2>/dev/null || log_warn "Failed setting: ${setting:0:50}"
+    done
+    
+    # Restart services
     killall Finder 2>/dev/null || true
     killall Dock 2>/dev/null || true
     
-    if [[ ${#failed_settings[@]} -gt 0 ]]; then
-        log_warn "Failed to apply ${#failed_settings[@]} settings"
-    else
-        log_info "All macOS settings applied successfully"
-    fi
+    log_info "System configured"
 }
 
-reboot_system() {
-    echo
-    log_info "Setup completed! Press any key to reboot the system..."
-    read -k1 -s
+# Configure Dock
+configure_dock() {
+    command -v dockutil &>/dev/null || { log_warn "dockutil not found"; return 0; }
     
-    if ! sudo reboot; then
-        log_error "Failed to reboot system"
-        return 1
-    fi
+    # Replace dock items
+    [[ -n "${DOCK_REPLACE:-}" ]] && for item in "${DOCK_REPLACE[@]}"; do
+        if [[ "$item" == *"|"* ]]; then
+            IFS="|" read -r add_app replace_app <<<"$item"
+            dockutil --add "$add_app" --replacing "$replace_app" &>/dev/null || 
+                log_warn "Failed to replace: $replace_app with $add_app"
+        fi
+    done
+    
+    # Add dock items
+    [[ -n "${DOCK_ADD:-}" ]] && for app in "${DOCK_ADD[@]}"; do
+        dockutil --add "$app" &>/dev/null || log_warn "Failed to add: $app"
+    done
+    
+    # Remove dock items
+    [[ -n "${DOCK_REMOVE:-}" ]] && for app in "${DOCK_REMOVE[@]}"; do
+        dockutil --remove "$app" &>/dev/null || log_warn "Failed to remove: $app"
+    done
+    
+    log_info "Dock configured"
 }
 
+# Cleanup Homebrew
+cleanup_brew() {
+    command -v brew &>/dev/null || return 0
+    
+    brew update || log_warn "Failed to update Homebrew"
+    brew upgrade || log_warn "Failed to upgrade packages"
+    brew cleanup || log_warn "Failed to cleanup"
+    
+    log_info "Homebrew cleanup completed"
+}
+
+# Main execution
 main() {
-    log_info "Starting macOS setup script..."
+    show_banner
     
-    # Keep sudo alive
-    if ! keep_sudo_alive; then
-        log_error "Failed to obtain sudo privileges"
-        exit 1
-    fi
+    # Download and load configuration
+    download_config || exit 1
+    load_config || exit 1
     
-    # Update macOS
-    update_macos || log_warn "macOS update step failed, continuing..."
+    confirm_execution
+    keep_sudo_alive || exit 1
     
-    # Install Homebrew
-    if ! install_homebrew; then
-        log_error "Homebrew installation failed"
-        exit 1
-    fi
+    log_step "Starting setup"
     
-    # Install packages
-    if [[ -f "./Brewfile" ]]; then
-        install_brewfile || log_warn "Brewfile installation had issues, continuing..."
-    else
-        install_formulae || log_warn "Formula installation had issues, continuing..."
-        install_casks || log_warn "Cask installation had issues, continuing..."
-        install_app_store_apps || log_warn "App Store installation had issues, continuing..."
-        install_vscode_extensions || log_warn "VSCode extension installation had issues, continuing..."
-    fi
+    install_homebrew || exit 1
+    install_packages
+    configure_git
+    configure_java
+    install_maven
+    configure_system
+    configure_dock
+    cleanup_brew
     
-    # Configuration steps
-    cleanup || log_warn "Cleanup had issues, continuing..."
-    set_java_home || log_warn "Java configuration had issues, continuing..."
-    check_and_install_maven || log_warn "Maven installation had issues, continuing..."
-    configure_macos_settings || log_warn "macOS settings configuration had issues, continuing..."
-    configure_dock || log_warn "Dock configuration had issues, continuing..."
-    configure_git || log_warn "Git configuration had issues, continuing..."
-    install_ohmyzsh || log_warn "Oh My Zsh installation had issues, continuing..."
-    
-    log_info "macOS setup completed!"
-    #reboot_system
+    log_info "Setup completed successfully!"
+    log_info "Some changes may require a restart to take effect"
 }
 
-# Call the main function to execute the script
 main "$@"

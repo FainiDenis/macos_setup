@@ -1,0 +1,108 @@
+# Configuration
+# Description: This file contains configuration settings for the macOS automate setup script.
+
+# Git Configuration
+GIT_USERNAME="FainiDenis"
+GIT_EMAIL="dtf8841@rit.edu"
+
+# Homebrew Casks: Applications installed via Homebrew Cask.
+# These are GUI applications available through Homebrew.
+CASKS=(
+    firefox
+    zoom
+    rectangle
+    displaylink
+    tailscale
+    mountain-duck
+    hazel
+    vlc
+    appcleaner
+    iterm2
+    stremio
+    wireshark
+    visual-studio-code
+    windows-app
+    libreoffice
+    oracle-jdk
+)
+
+# Homebrew Formulae: Command line tools installed via Homebrew.
+FORMULAE=(
+    tree
+    htop
+    curl
+    mas
+    nmap
+    wget
+    git
+    python
+    python-tk
+)
+
+# VSCode Extensions: Specifies the IDs of Visual Studio Code extensions to install.
+# Each ID corresponds to an extension on the Visual Studio Code Marketplace.
+VSCODE=(
+  "esbenp.prettier-vscode"
+  "GitHub.copilot"
+  "dsznajder.es7-react-js-snippets"
+  "ritwickdey.liveserver"
+  "github.vscode-pull-request-github"
+  "sourcegraph.cody-ai"
+  "eamodio.gitlens"
+  "meshintelligenttechnologiesinc.pieces-vscode"
+  "foxundermoon.shell-format"
+)
+
+# App Store Apps: List of App Store app IDs to install via `mas` (Mac App Store CLI).
+# Each number corresponds to an application's ID in the App Store.
+APPSTORE=(
+  897118787      # Shazam
+  1530145038     # Amperfy Music
+  1564384601     # Evermusic
+)
+
+# SYSTEM SETTINGS: Commands to configure macOS system preferences and behaviors.
+SETTINGS=(
+  "defaults write -g com.apple.mouse.scaling 3"     # Sets the mouse speed to 3
+  "defaults write -g com.apple.trackpad.scaling 3"   # Sets the trackpad speed to 3
+  "defaults write com.apple.driver.AppleBluetoothMultitouch.mouse MouseButtonMode TwoButton" # Sets the Bluetooth mouse to two-button mode
+  "defaults write com.apple.AppleMultitouchMouse.plist MouseButtonMode TwoButton"   # Sets the multi-touch mouse to two-button mode
+  "defaults write -g AppleShowAllExtensions -bool true"     # Shows all file extensions in Finder
+  "defaults write com.apple.finder AppleShowAllFiles true"   # Shows hidden files in Finder
+  "defaults write com.apple.finder ShowPathbar -bool true"   # Shows the path bar in Finder
+  "defaults write com.apple.finder ShowStatusBar -bool true"  # Shows the status bar in Finder
+  "defaults write com.apple.finder NewWindowTarget PfHm"      # Makes new Finder windows open in the home directory
+  "defaults write com.apple.finder FXPreferredViewStyle Nlsv"  # Sets the preferred view style in Finder to list view
+  "defaults write com.apple.finder _FXSortFoldersFirst -bool true"  # Makes Finder sort folders before files
+  "defaults -currentHost write com.apple.ImageCapture disableHotPlug -bool true" # Stops Photos from opening automatically when devices are plugged in
+  "defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true"    # Dont create .DS_Store Files On Network Volumes
+  "defaults write com.apple.desktopservices DSDontWriteUSBStores -bool true"       # Dont create .DS_Store Files On USB Volumes
+  "defaults write com.apple.finder FXEnableExtensionChangeWarning -bool false"    # Disable the warning when changing a file extension
+  "chflags nohidden ~/Library"  # Makes the Library folder visible in Finder
+)
+
+# DOCK SETTINGS: Configuration for adding, removing, and replacing Dock items.
+DOCK_REPLACE=(
+  # Format: "replacement_app_path|app_name_to_replace"
+  "/Applications/Firefox.app|Safari"
+)
+
+DOCK_ADD=(
+  "/Applications/iTerm.app"
+  "/Applications/Visual Studio Code.app"
+  "/Applications/Microsoft Teams (work or school).app"
+)
+DOCK_REMOVE=(
+  "Meldinger"
+  "Kart"
+  "Bilder"
+  "Påminnelser"
+  "FaceTime"
+  "Kontakter"
+  "TV"
+  "Musikk"
+  "Mail"
+)
+
+# HOMEBREW AUTOUPDATE: Configures the frequency of Homebrew package updates in milliseconds.
+HOMEBREW_UPDATE_FREQUENCY=86400 # 24 hours in milliseconds

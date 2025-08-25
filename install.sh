@@ -48,6 +48,10 @@ HOMEBREW_PACKAGES=(
     tree
     htop
     mas
+    zsh-autosuggestions
+    zsh-syntax-highlighting
+    zsh-history-substring-search
+    powerlevel10k
 )
 
 CASK_PACKAGES=(

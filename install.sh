@@ -69,7 +69,9 @@ CASK_PACKAGES=(
     #wireshark
 )
 
+
 MAS_APPS=(
+    # Note: MAS app IDs can be found via `mas search "App Name"`
     "897118787:Shazam"
     "1564384601:Evermusic"
     "1530145038:Amperfy Music"
@@ -194,13 +196,20 @@ setup_zsh() {
   [[ -f ~/.zshrc ]] && mv ~/.zshrc ~/.zshrc.backup.$(date +%Y%m%d_%H%M%S)
   prefix=$(brew --prefix)
   cat > ~/.zshrc <<EOF
-[[ -r "\${XDG_CACHE_HOME:-\$HOME/.cache}/p10k-instant-prompt-\${(%):-%n}.zsh" ]] &&
-  source "\${XDG_CACHE_HOME:-\$HOME/.cache}/p10k-instant-prompt-\${(%):-%n}.zsh"
+# Zsh configuration
 
-source $prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-source $prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-source $prefix/share/zsh-history-substring-search/zsh-history-substring-search.zsh
-source $prefix/share/powerlevel10k/powerlevel10k.zsh-theme
+# Only source plugins if they exist
+[[ -f "$prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] &&
+  source "$prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+
+[[ -f "$prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] &&
+  source "$prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+
+[[ -f "$prefix/share/zsh-history-substring-search/zsh-history-substring-search.zsh" ]] &&
+  source "$prefix/share/zsh-history-substring-search/zsh-history-substring-search.zsh"
+
+[[ -f "$prefix/share/powerlevel10k/powerlevel10k.zsh-theme" ]] &&
+  source "$prefix/share/powerlevel10k/powerlevel10k.zsh-theme"
 
 autoload -U compinit && compinit
 alias c='clear' rmm='rm -rf' lss='ls -lah' reload='source ~/.zshrc'

@@ -1,311 +1,247 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 
-# Description: macOS setup script that loads configuration from separate config file
-# Usage: bash -c "$(curl -fsSL https://raw.githubusercontent.com/FainiDenis/macos_setup/main/install.sh)"
+###############################################################################
+#  macOS Setup Script
+#  This script automates the setup of a new or reset macOS environment
+#  by installing essential software and configuring system settings.
+#  (c) 2025 • MIT License
+###############################################################################
 
-set -euo pipefail
+#  Colors / log helpers
+GREEN=$'\033[0;32m'; BLUE=$'\033[0;34m'
+RED=$'\033[0;31m';   YELLOW=$'\033[1;33m'; NC=$'\033[0m'; BOLD=$'\033[1m'
 
-# GitHub Configuration
-GITHUB_USER="FainiDenis"
-GITHUB_REPO="macos_setup"
-GITHUB_BRANCH="main"
-CONFIG_URL="https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/$GITHUB_BRANCH/config"
+log_info()    { printf '%sℹ️  %s%s\n'  "$BLUE"  "$1" "$NC"; }
+log_success() { printf '%s✅ %s%s\n'  "$GREEN" "$1" "$NC"; }
+log_warning() { printf '%s⚠️  %s%s\n' "$YELLOW" "$1" "$NC"; }
+log_error()   { printf '%s❌ %s%s\n'  "$RED"   "$1" "$NC"; }
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+#  Robust shell behavior & cleanup
+set -Eeuo pipefail
 
-# Logging
-log() { echo -e "${2:-$NC}[${1}]${NC} ${3}"; }
-log_info() { log "INFO" "$GREEN" "$1"; }
-log_warn() { log "WARN" "$YELLOW" "$1"; }
-log_error() { log "ERROR" "$RED" "$1" >&2; }
-log_step() { log "STEP" "$BLUE" "$1"; }
-
-# Error handling
-handle_error() {
-    log_error "Script failed at line $1 with exit code $2"
-    [[ -n "$TEMP_DIR" ]] && rm -rf "$TEMP_DIR" 2>/dev/null
-    exit $2
+cleanup() {
+  tput cnorm || true    # control cursor visibility
 }
 
-# Temporary config file
-TEMP_DIR=$(mktemp -d -t macos-setup-XXXXXX)
-CONFIG_FILE="$TEMP_DIR/config"
+trap cleanup EXIT
+trap 'log_error "Interrupted"; exit 1' INT HUP TERM
+trap 'log_error "Line $LINENO (exit $?) – $BASH_COMMAND"; exit 1' ERR
 
-cleanup() { rm -rf "$TEMP_DIR" 2>/dev/null && log_info "Cleaned temporary files"; }
-trap 'cleanup' EXIT
-trap 'handle_error $LINENO $?' ERR
+#  Progress-bar helpers
+BAR_W=30
+show_bar() {
+  local pct=$1 msg=$2
+  local done=$(( BAR_W * pct / 100 ))
+  local todo=$(( BAR_W - done ))
+  printf '\r\033[K%s┃%s' "$BLUE" "$NC"
+  printf '%*s' "$done" '' | tr ' ' '█'
+  printf '%*s' "$todo" '' | tr ' ' '░'
+  printf '%s┃ %3d%% %s%s' "$BLUE" "$pct" "$msg" "$NC"
+}
+newline_below_bar() { printf '\n'; }
 
-# Download configuration
-download_config() {
-    log_step "Downloading configuration"
+#  Application lists
+HOMEBREW_PACKAGES=(
+    git
+    curl
+    python3
+    tree
+    htop
+    mas
+)
+
+CASK_PACKAGES=(
+    firefox
+    rectangle
+    mountain-duck
+    hazel
+    vlc
+    appcleaner
+    iterm2
+    stremio
+    visual-studio-code
+    libreoffice
+
+    # require password
+    zoom
+    tailscale
+    windows-app
+    #wireshark
+)
+
+MAS_APPS=(
+    "897118787:Shazam"
+    "1564384601:Evermusic"
+    "1530145038:Amperfy Music"
+)
+
+#  Welcome
+welcome() {
+  echo "======================================================"
+  log_info   "🎯  macOS Setup Script"
+  echo "======================================================"
+  log_warning "You'll be prompted for your password when needed."
+  echo "1. Please make sure you reviewed this script before running it."
+  echo "2. Ensure a stable internet connection"
+  echo
+  read -p "Press ENTER to continue or CTRL-C to quit…"
+}
+
+#  Homebrew – install or update/upgrade
+brew_bootstrap() {
+  if ! command -v brew &>/dev/null; then
+    log_info "Homebrew not found → installing…"
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    [[ $(uname -m) == arm64 ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
+  else
+    log_info "Homebrew found → updating & upgrading…"
+    brew update; brew upgrade; brew cleanup
+  fi
+}
+
+#  Install Homebrew packages
+install_brew_packages() {
+  local total=${#HOMEBREW_PACKAGES[@]} current=0 pct
+  show_bar 0 "starting…"; newline_below_bar
+  
+  for package in "${HOMEBREW_PACKAGES[@]}"; do
+    current=$((current+1)); pct=$(( current * 100 / total ))
     
-    if ! curl -fsSL "$CONFIG_URL" -o "$CONFIG_FILE"; then
-        log_error "Failed to download config from: $CONFIG_URL"
-        log_error "Please check:"
-        log_error "  1. Repository exists and is public"
-        log_error "  2. File 'config' exists in the repository"
-        return 1
+    if brew list --formula | grep -q "^$package\$"; then
+      show_bar "$pct" "✓ already installed $package"; newline_below_bar; continue
     fi
     
-    log_info "Configuration downloaded"
+    show_bar "$pct" "↓ $package"; newline_below_bar
+    brew install "$package" && show_bar "$pct" "✔︎ $package"; newline_below_bar
+  done
 }
 
-# Load configuration
-load_config() {
-    [[ -f "$CONFIG_FILE" ]] || { log_error "Config file not found"; return 1; }
+#  Install Cask packages
+install_cask_packages() {
+  local total=${#CASK_PACKAGES[@]} current=0 pct
+  show_bar 0 "starting…"; newline_below_bar
+  
+  for package in "${CASK_PACKAGES[@]}"; do
+    current=$((current+1)); pct=$(( current * 100 / total ))
     
-    # Source the configuration file
-    if ! source "$CONFIG_FILE"; then
-        log_error "Failed to load configuration"
-        return 1
+    if brew list --cask | grep -q "^$package\$"; then
+      show_bar "$pct" "✓ already installed $package"; newline_below_bar; continue
     fi
     
-    # Run validation if available
-    if command -v validate_config &>/dev/null; then
-        validate_config || { log_error "Configuration validation failed"; return 1; }
+    show_bar "$pct" "↓ $package"; newline_below_bar
+    brew install --cask "$package" && show_bar "$pct" "✔︎ $package"; newline_below_bar
+  done
+}
+
+#  Install MAS items
+install_mas_items() {
+  command -v mas >/dev/null || brew install mas
+  
+  # Try to get installed apps, but continue if it fails (macOS 14+ issue)
+  local installed_apps=()
+  if mas list &>/dev/null; then
+    installed_apps=($(mas list | awk '{print $1}'))
+  else
+    log_warning "Cannot read App Store account status; installs may prompt or fail."
+  fi
+
+  local total=${#MAS_APPS[@]} current=0 id name pct
+  show_bar 0 "starting…"; newline_below_bar
+  
+  for entry in "${MAS_APPS[@]}"; do
+    current=$((current+1)); pct=$(( current * 100 / total ))
+    id=${entry%%:*}; name=${entry#*:}
+
+    if [[ " ${installed_apps[@]-} " == *" $id "* ]]; then
+      show_bar "$pct" "✓ already installed $name"; newline_below_bar; continue
     fi
-    
-    log_info "Configuration loaded successfully"
-}
 
-# Display banner
-show_banner() {
-    echo
-    echo -e "${BLUE}================================${NC}"
-    echo -e "${BLUE}    macOS Automated Setup       ${NC}"
-    echo -e "${BLUE}================================${NC}"
-    echo
-    echo -e "${GREEN}Repository:${NC} https://github.com/$GITHUB_USER/$GITHUB_REPO"
-    echo -e "${GREEN}System:${NC} $(sw_vers -productName) $(sw_vers -productVersion) ($(uname -m))"
-    echo
-}
-
-# Confirmation
-confirm_execution() {
-    echo -e "${YELLOW}This script will:${NC}"
-    echo "  • Install Homebrew and packages"
-    echo "  • Configure macOS settings"
-    echo "  • Set up development environment"
-    echo
-    
-    read -r -p "Continue? (y/N): " REPLY
-    [[ $REPLY =~ ^[Yy]$ ]] || { log_info "Setup cancelled"; exit 0; }
-}
-
-# Keep sudo alive
-keep_sudo_alive() {
-    sudo -v || { log_error "Failed to obtain sudo"; return 1; }
-    
-    while true; do
-        sudo -n true
-        sleep 60
-        kill -0 "$$" || exit
-    done 2>/dev/null &
-    
-    log_info "Sudo privileges obtained"
-}
-
-# Install Homebrew
-install_homebrew() {
-    command -v brew &>/dev/null && { log_info "Homebrew already installed"; return 0; }
-    
-    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
-        log_error "Failed to install Homebrew"; return 1;
-    }
-    
-    # Add to PATH
-    local brew_path="/opt/homebrew/bin/brew"
-    [[ -f "$brew_path" ]] || brew_path="/usr/local/bin/brew"
-    [[ -f "$brew_path" ]] || { log_error "Homebrew not found"; return 1; }
-    
-    echo "eval \"\$($brew_path shellenv)\"" >> "${HOME}/.zprofile"
-    eval "\$($brew_path shellenv)"
-    
-    export HOMEBREW_NO_INSTALL_CLEANUP=1
-    log_info "Homebrew installed"
-}
-
-# Install packages
-install_packages() {
-    local failed=()
-    
-    # Install formulae
-    [[ -n "${FORMULAE:-}" ]] && for formula in "${FORMULAE[@]}"; do
-        brew install "$formula" || { log_warn "Failed: $formula"; failed+=("$formula"); }
-    done
-    
-    # Install regular casks
-    [[ -n "${CASKS:-}" ]] && for cask in "${CASKS[@]}"; do
-        # Skip sudo casks (handled separately)
-        [[ -n "${SUDO_CASKS:-}" && " ${SUDO_CASKS[*]} " =~ " $cask " ]] && continue
-        brew install --cask "$cask" || { log_warn "Failed: $cask"; failed+=("$cask"); }
-    done
-    
-    # Install sudo casks with elevated privileges
-    [[ -n "${SUDO_CASKS:-}" ]] && for cask in "${SUDO_CASKS[@]}"; do
-        log_info "Installing sudo cask: $cask"
-        sudo brew install --cask "$cask" || { log_warn "Failed sudo cask: $cask"; failed+=("$cask"); }
-    done
-    
-    # Install App Store apps
-    if [[ -n "${APPSTORE:-}" ]] && command -v mas &>/dev/null; then
-        for app in "${APPSTORE[@]}"; do
-            mas install "$app" || { log_warn "Failed App Store app: $app"; failed+=("$app"); }
-        done
+    show_bar "$pct" "↓ $name"; newline_below_bar
+    if mas install "$id"; then
+      show_bar "$pct" "✔︎ $name"; newline_below_bar
+    else
+      log_warning "failed: $name"
     fi
-    
-    # Install VSCode extensions
-    if [[ -n "${VSCODE:-}" ]] && command -v code &>/dev/null; then
-        for extension in "${VSCODE[@]}"; do
-            code --install-extension "$extension" || { log_warn "Failed VSCode extension: $extension"; failed+=("$extension"); }
-        done
-    fi
-    
-    [[ ${#failed[@]} -eq 0 ]] || log_warn "Failed packages: ${failed[*]}"
+  done
+  
+  # Attempt a bulk upgrade; ignore errors
+  mas upgrade || true
 }
 
-# Configure Git
-configure_git() {
-    [[ -z "${GIT_USERNAME:-}" || -z "${GIT_EMAIL:-}" ]] && { log_warn "Git not configured"; return 0; }
-    
-    command -v git &>/dev/null || { log_warn "Git not found"; return 1; }
-    
-    git config --global user.name "$GIT_USERNAME"
-    git config --global user.email "$GIT_EMAIL"
-    git config --global color.ui true
-    
-    log_info "Git configured"
-}
-
-# Configure Java
-configure_java() {
-    [[ -z "${JAVA_HOME:-}" ]] && { log_warn "Java not configured"; return 0; }
-    [[ -d "$JAVA_HOME" ]] || { log_warn "Java not found at $JAVA_HOME"; return 1; }
-    
-    local zshrc="${HOME}/.zshrc"
-    if ! grep -q "export JAVA_HOME=$JAVA_HOME" "$zshrc" 2>/dev/null; then
-        echo "export JAVA_HOME=$JAVA_HOME" >> "$zshrc"
-        echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> "$zshrc"
-        log_info "Java environment configured"
-    fi
-}
-
-# Install Maven
-install_maven() {
-    [[ -z "${MAVEN_VERSION:-}" || -z "${MAVEN_BIN_URL:-}" || -z "${MAVEN_HOME:-}" ]] && {
-        log_warn "Maven not configured"; return 0;
-    }
-    
-    command -v mvn &>/dev/null && { log_info "Maven already installed"; return 0; }
-    
-    log_step "Installing Maven $MAVEN_VERSION"
-    
-    local temp_dir=$(mktemp -d)
-    local maven_zip="$temp_dir/maven.zip"
-    
-    curl -L "$MAVEN_BIN_URL" -o "$maven_zip" || { log_error "Failed to download Maven"; return 1; }
-    
-    sudo mkdir -p "$(dirname "$MAVEN_HOME")" || { log_error "Could not create Maven directory"; return 1; }
-    sudo unzip -q "$maven_zip" -d "$(dirname "$MAVEN_HOME")" || { log_error "Failed to extract Maven"; return 1; }
-    
-    local zshrc="${HOME}/.zshrc"
-    if ! grep -q "export MAVEN_HOME=$MAVEN_HOME" "$zshrc" 2>/dev/null; then
-        echo "export MAVEN_HOME=$MAVEN_HOME" >> "$zshrc"
-        echo 'export PATH="$MAVEN_HOME/bin:$PATH"' >> "$zshrc"
-    fi
-    
-    rm -rf "$temp_dir"
-    log_info "Maven installed"
-}
-
-# Configure system settings
+#  Configure macOS settings
 configure_system() {
-    [[ -z "${SETTINGS:-}" ]] && { log_warn "No system settings configured"; return 0; }
+    # https://macos-defaults.com
+    log_info "Configuring System Preferences…"
     
-    # Create directories
-    [[ -n "${SCREENSHOT_DIR:-}" ]] && mkdir -p "$SCREENSHOT_DIR"
-    [[ -n "${DIRECTORIES_TO_CREATE:-}" ]] && for dir in "${DIRECTORIES_TO_CREATE[@]}"; do
-        mkdir -p "$dir" 2>/dev/null || log_warn "Failed to create: $dir"
-    done
-    
-    # Apply settings
-    for setting in "${SETTINGS[@]}"; do
-        eval "$setting" 2>/dev/null || log_warn "Failed setting: ${setting:0:50}"
-    done
-    
-    # Restart services
-    killall Finder 2>/dev/null || true
-    killall Dock 2>/dev/null || true
-    
-    log_info "System configured"
+    defaults write com.apple.finder AppleShowAllFiles -bool true  # Show hidden files in Finder
+    mkdir -p "$HOME/Documents/Screenshots"    # Create screenshots directory
+    defaults write com.apple.screencapture location "$HOME/Screenshots"   # Set screenshot location
+    defaults write com.apple.dock autohide -bool true # Auto-hide Dock
+    defaults write com.apple.dock tilesize -int 30    # Set Dock icon size
+    defaults write -g com.apple.mouse.scaling 3.0 # Set mouse speed
+    defaults write -g com.apple.trackpad.scaling 3.0 # Set trackpad
+    defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true  # Disable .DS_Store on network drives
+    defaults write com.apple.finder FXPreferredViewStyle -string "Nlsv"   # Set Finder to list view
+  
+    # Restart affected services
+    killall Finder Dock SystemUIServer 2>/dev/null || true
+    log_success "System Preferences applied"
 }
 
-# Configure Dock
-configure_dock() {
-    command -v dockutil &>/dev/null || { log_warn "dockutil not found"; return 0; }
-    
-    # Replace dock items
-    [[ -n "${DOCK_REPLACE:-}" ]] && for item in "${DOCK_REPLACE[@]}"; do
-        if [[ "$item" == *"|"* ]]; then
-            IFS="|" read -r add_app replace_app <<<"$item"
-            dockutil --add "$add_app" --replacing "$replace_app" &>/dev/null || 
-                log_warn "Failed to replace: $replace_app with $add_app"
-        fi
-    done
-    
-    # Add dock items
-    [[ -n "${DOCK_ADD:-}" ]] && for app in "${DOCK_ADD[@]}"; do
-        dockutil --add "$app" &>/dev/null || log_warn "Failed to add: $app"
-    done
-    
-    # Remove dock items
-    [[ -n "${DOCK_REMOVE:-}" ]] && for app in "${DOCK_REMOVE[@]}"; do
-        dockutil --remove "$app" &>/dev/null || log_warn "Failed to remove: $app"
-    done
-    
-    log_info "Dock configured"
+#  Install Oh My Zsh and plugins
+setup_zsh() {
+  log_info "Configuring Z-shell…"
+  [[ -f ~/.zshrc ]] && mv ~/.zshrc ~/.zshrc.backup.$(date +%Y%m%d_%H%M%S)
+  prefix=$(brew --prefix)
+  cat > ~/.zshrc <<EOF
+[[ -r "\${XDG_CACHE_HOME:-\$HOME/.cache}/p10k-instant-prompt-\${(%):-%n}.zsh" ]] &&
+  source "\${XDG_CACHE_HOME:-\$HOME/.cache}/p10k-instant-prompt-\${(%):-%n}.zsh"
+
+source $prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+source $prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+source $prefix/share/zsh-history-substring-search/zsh-history-substring-search.zsh
+source $prefix/share/powerlevel10k/powerlevel10k.zsh-theme
+
+autoload -U compinit && compinit
+alias c='clear' rmm='rm -rf' lss='ls -lah' reload='source ~/.zshrc'
+alias t='tmux' e='code' z='zed' mtop='macmon'
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+EOF
+  [[ $SHELL != "$(which zsh)" ]] && chsh -s "$(which zsh)"
+  log_success "Z-shell configured."
 }
 
-# Cleanup Homebrew
-cleanup_brew() {
-    command -v brew &>/dev/null || return 0
-    
-    brew update || log_warn "Failed to update Homebrew"
-    brew upgrade || log_warn "Failed to upgrade packages"
-    brew cleanup || log_warn "Failed to cleanup"
-    
-    log_info "Homebrew cleanup completed"
-}
-
-# Main execution
+#  Main
 main() {
-    show_banner
-    
-    # Download and load configuration
-    download_config || exit 1
-    load_config || exit 1
-    
-    confirm_execution
-    keep_sudo_alive || exit 1
-    
-    log_step "Starting setup"
-    
-    install_homebrew || exit 1
-    install_packages
-    configure_git
-    configure_java
-    install_maven
-    configure_system
-    configure_dock
-    cleanup_brew
-    
-    log_info "Setup completed successfully!"
-    log_info "Some changes may require a restart to take effect"
+  welcome
+  newline_below_bar
+  
+  # Install and configure Homebrew
+  brew_bootstrap
+  newline_below_bar
+  
+  # Install packages
+  log_info "Installing Homebrew packages…"; newline_below_bar
+  install_brew_packages
+  newline_below_bar
+  
+  log_info "Installing Cask packages…"; newline_below_bar
+  install_cask_packages
+  newline_below_bar
+  
+  log_info "Installing Mac App Store apps…"; newline_below_bar
+  install_mas_items
+  newline_below_bar
+  
+  # Configure system
+  configure_system
+  newline_below_bar
+  
+  # Set up shell environment
+  setup_zsh
+  newline_below_bar
+  
+  echo -e "\n${GREEN}${BOLD}✨  All done! Please consider rebooting.${NC}"
 }
 
 main "$@"
